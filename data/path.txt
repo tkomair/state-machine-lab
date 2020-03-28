@@ -1,0 +1,8 @@
+Point[0]: time = 0; vals = -111,-11;
+Point[1]: time = 0.33; vals = -100,42;
+Point[2]: time = 0.66; vals = 16,84.9999;
+Point[3]: time = 1; vals = 138,29;
+Point[4]: time = 1.33; vals = 135,-46;
+Point[5]: time = 1.66; vals = 57,-106;
+Point[6]: time = 2; vals = -44,-93.0001;
+Point[7]: time = 3; vals = -111,-10;

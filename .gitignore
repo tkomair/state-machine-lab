@@ -11,22 +11,19 @@
 *.gch
 *.pch
 
-# Compiled Dynamic libraries
-*.so
-*.dylib
-*.dll
-
-# Fortran module files
-*.mod
-*.smod
-
 # Compiled Static libraries
 *.lai
 *.la
 *.a
-*.lib
 
 # Executables
 *.exe
 *.out
 *.app
+/.vs
+/obj
+/bin
+/imgui.ini
+/Lab - State Machines.docx
+/Lab – State Machines.pptx
+/Lab - State Machines.zip
