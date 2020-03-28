@@ -5,6 +5,8 @@
 #include <Demos/CurveEditor.h>  // CS 230 HW 4
 #include "DemoActor.h"
 #include <fstream>
+#include <sstream>
+#include <iomanip>
 struct SM_Wait;
 struct SM_PickTarget;
 struct SM_GoToTarget;
@@ -141,7 +143,7 @@ struct SM_Navigate : public SuperState {
 
 		// otherwise 
 		else 
-			mInternalStateMachine.ChangeState("Inactive");
+			mInternalStateMachine.ChangeState("Idle");
 
 	}
 };
@@ -152,9 +154,107 @@ struct SM_Nav_Active : public State {
 		:State("Active"), mWanderSM(wanderSM) {}
 
 	StateMachine* mWanderSM = nullptr;
+	AEVec2 mOriginalTarget; 
+	AEVec2 mPreviousPosition;
+	float mStuckTimer = 0.0f;
+	void LogicEnter() {
+		SM_GoToTarget* gotoState = (SM_GoToTarget*)mWanderSM->GetState("Go To Target");
+		mOriginalTarget = gotoState->mTarget;
+		mPreviousPosition = mActor->mPosition;
+		mStuckTimer = 0.0f;
+	}
 	void LogicUpdate() {
 		SM_GoToTarget* gotoState = (SM_GoToTarget*)mWanderSM->GetState("Go To Target");
-		gotoState->mTarget = gCamera.WindowPointToWorld(gAEMousePosition);
+
+		// use sensor to check surroundings
+		DemoActor* actor = (DemoActor*)mActor;
+		OBJECT_PTR_LIST	sensedObjects;
+		gCollisionSystem.CollideBodyWithStatics(&actor->mSensorCollider, sensedObjects);
+
+
+		// for debug draw below
+		AEGfxSetTransform(&gCamera.GetWorldToCam());
+
+		// navigation vector
+		AEVec2 direction = (mOriginalTarget - actor->mPosition).Normalize() * 2;
+
+		// loop through all the objects 
+		for (auto obj : sensedObjects)
+		{
+			RigidBody* body = (RigidBody*)obj;
+
+			// make a normalized ray
+			Ray r; r.mOrigin = actor->mPosition;
+			r.mDirection = (body->mPosition - r.mOrigin).Normalize();
+			f32 t = -1.0f;
+			Vector2 outP;
+			// ray cast against these objects
+			switch (body->mCollisionShape)
+			{
+			case CSHAPE_CIRCLE: 
+				t = RayCastCircle(r, body->mPosition, body->mScale.x, &outP);
+				break;
+			default:
+				break;
+			}
+
+			if (t > 0) {
+
+				// since the ray is normalized, then t represents the distance to the object we're raycasting
+				// assuming the max distance for seeing somethign is the radius of our collider, we're 
+				// going to normalize t with respect to this value. 
+				f32 distToObj = t; // store the distance to object
+				t = t / actor->mSensorCollider.mScale.x;
+
+				// depending on t, we're going to move away from the obstacle
+				AEVec2 away = -r.mDirection * (1-t);
+				if (t < 0.1)away *= 2;
+				direction += away;
+
+				// debug draw
+				AEGfxRect(outP.x, outP.y, 0, 10, 10, AE_COLORS_BLUE);
+				auto winP = gCamera.WorldPointToViewport(outP + AEVec2(20,20));
+				winP.y = gAESysWinHeight - winP.y;
+				std::stringstream str;
+				str << std::setprecision(2) << t * 100.0f << "%";
+				AEGfxPrint(winP.x, winP.y, AE_COLORS_BLUE, str.str().c_str());
+			}
+
+
+			// debug draw
+			AEGfxLine(actor->mPosition.x, actor->mPosition.y, 0, AE_COLORS_BLUE,
+				obj->mPosition.x, obj->mPosition.y, 0, AE_COLORS_BLUE);
+		}
+		
+
+		// if we're in place
+		f32 dist = actor->mPosition.Distance(mPreviousPosition);
+		AEGfxPrint(400, 30, AE_COLORS_BLACK, std::to_string(dist).c_str());
+		if (dist < 10) {
+			mStuckTimer += gAEFrameTime;
+			if (mStuckTimer > 2.0f) {
+				mWanderSM->ChangeState("Wait"); // this will change our state internally. 
+			}
+
+		}
+		else mStuckTimer = 0.0f;
+		mPreviousPosition = actor->mPosition;
+
+		// set the target ahead of the player
+		gotoState->mTarget = actor->mPosition + direction * actor->mMoveSpeed;
+
+		// debug-> let the player take over
+		if (AEInputMousePressed(AE_MOUSE_LEFT)) {
+			gotoState->mTarget = gCamera.WindowPointToWorld(gAEMousePosition);
+		}
+
+		// if we've reached the original target wer're done
+		if (actor->mPosition.Distance(mOriginalTarget) < 15)
+			mWanderSM->ChangeState("Wait"); // this will change our state internally. 
+
+		// draw to original target
+		AEGfxLine(actor->mPosition.x, actor->mPosition.y, 0, AE_COLORS_BROWN,
+			mOriginalTarget.x, mOriginalTarget.y, 0, AE_COLORS_BROWN);
 	}
 };
 
@@ -208,10 +308,17 @@ void DemoActor::Update()
 {
 	// custom logic
 	if (mBodyCollider.mbHasCollided) {
+
 		// go to wait state.
-		if(mBrain[0].mCurrentState && mBrain[0].mCurrentState->mName != "Pick Target")
+		if (mTimeInCollision > 2.0f && mBrain[0].mCurrentState && mBrain[0].mCurrentState->mName != "Pick Target") {
+			mTimeInCollision = 0.0f;
 			mBrain[0].ChangeState("Wait");
+		}
+
+		// increase the time in collision
+		mTimeInCollision += gAEFrameTime;
 	}
+	else mTimeInCollision = 0.0f;
 		
 
 	// IMPORTANT: Update the state machines
@@ -255,7 +362,7 @@ void DemoActor::InitializeColliders()
 
 	mSensorCollider.mCollisionShape = CSHAPE_CIRCLE;
 	mSensorCollider.mPosition = mPosition;
-	mSensorCollider.mScale.x = 350.0f;
-	mSensorCollider.mColor = AE_COLORS_BLACK;
+	mSensorCollider.mScale.x = 550.0f;
+	mSensorCollider.mColor = AE_COLORS_BLUE;
 
 }

@@ -8,6 +8,7 @@ struct DemoActor : public Actor
 	RigidBody mBodyCollider;
 	RigidBody mSensorCollider; 
 	float mMoveSpeed = 170.0f;
+	float mTimeInCollision = 0.0f;
 	void Initialize();
 	void Update();
 	void Render(AEMtx33 * camMtx);
