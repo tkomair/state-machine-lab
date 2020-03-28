@@ -48,7 +48,7 @@ struct SM_GoToTarget : public State
 			if (returnState) 
 				mOwnerStateMachine->ChangeState(returnState);
 			else
-			mOwnerStateMachine->ChangeState("Wait");
+				mOwnerStateMachine->ChangeState("Wait");
 		}
 	}
 };
@@ -128,6 +128,9 @@ struct SM_OnPath : public State
 
 void DemoActor::Initialize()
 {
+	// initiailize Colliders
+	InitializeColliders();
+
 	// initialize as an Actor
 	Actor::Initialize(); 
 
@@ -156,13 +159,55 @@ void DemoActor::Initialize()
 void DemoActor::Update()
 {
 	// custom logic
-	// nothing... for now.
-	
-	// debug drawing the path
-	AEMtx33 gfxTransform = gCamera.GetWorldToCam() * AEMtx33::Translate(mPathPosition.x, mPathPosition.y);
-	AEGfxSetTransform(&gfxTransform);
-	DrawPath(mPath);
+	if (mBodyCollider.mbHasCollided) {
+		// go to wait state.
+		if(mBrain[0].mCurrentState && mBrain[0].mCurrentState->mName != "Pick Target")
+			mBrain[0].ChangeState("Wait");
+	}
+		
 
 	// IMPORTANT: Update the state machines
 	Actor::Update();
+
+	// After logic, update the body
+	mBodyCollider.mPosition = mPosition;
+	mBodyCollider.mRotation = mRotation;
+	mBodyCollider.mScale = mScale;
+}
+
+void DemoActor::Render(AEMtx33* camMtx)
+{
+	// get position from collider
+	// we know that render is called after the physics step
+	// so the position of the collider might have been modified
+	// due to collisions. 
+	mPosition = mSensorCollider.mPosition = mBodyCollider.mPosition;
+
+	// Render normally
+	Actor::Render(camMtx);
+
+	// debug drawing the path
+	AEGfxSetTransform(&(*camMtx * AEMtx33::Translate(mPathPosition.x, mPathPosition.y)));
+	DrawPath(mPath);
+
+	// debug draw colliders
+	mBodyCollider.Render(camMtx);
+	mSensorCollider.Render(camMtx);
+}
+
+void DemoActor::InitializeColliders()
+{
+	mBodyCollider.mPosition = mPosition;
+	mBodyCollider.mScale = mScale;
+	mBodyCollider.mRotation = mRotation;
+	mBodyCollider.mColor = AE_COLORS_BLACK;
+
+	mBodyCollider.mCollisionShape = CSHAPE_OBB;
+	gCollisionSystem.AddRigidBody(&mBodyCollider, true);
+
+	mSensorCollider.mCollisionShape = CSHAPE_CIRCLE;
+	mSensorCollider.mPosition = mPosition;
+	mSensorCollider.mScale.x = 350.0f;
+	mSensorCollider.mColor = AE_COLORS_BLACK;
+
 }

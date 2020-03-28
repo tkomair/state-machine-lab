@@ -5,9 +5,13 @@ struct DemoActor : public Actor
 {
 	Path2D mPath;
 	Vector2 mPathPosition = { 100, 100 };
+	RigidBody mBodyCollider;
+	RigidBody mSensorCollider; 
 	float mMoveSpeed = 170.0f;
 	void Initialize();
 	void Update();
+	void Render(AEMtx33 * camMtx);
+	void InitializeColliders();
 };
 
 struct GameObject;
