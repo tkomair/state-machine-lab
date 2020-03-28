@@ -126,6 +126,38 @@ struct SM_OnPath : public State
 	}
 };
 
+struct SM_Navigate : public SuperState {
+	SM_Navigate(StateMachine* wanderSM) 
+		:SuperState("Navigate", NULL), mWanderSM(wanderSM){}
+
+	StateMachine* mWanderSM = nullptr;
+	void LogicUpdate()
+	{
+		if (!mWanderSM)return;
+
+		// if we're about to change to the Go to Target, if so go to active
+		if (mWanderSM->mCurrentState && mWanderSM->mNextState->mName == "Go To Target")
+			mInternalStateMachine.ChangeState("Active");// this is ok, because if we're already in that state nothing will change
+
+		// otherwise 
+		else 
+			mInternalStateMachine.ChangeState("Inactive");
+
+	}
+};
+
+
+struct SM_Nav_Active : public State {
+	SM_Nav_Active(StateMachine* wanderSM) 
+		:State("Active"), mWanderSM(wanderSM) {}
+
+	StateMachine* mWanderSM = nullptr;
+	void LogicUpdate() {
+		SM_GoToTarget* gotoState = (SM_GoToTarget*)mWanderSM->GetState("Go To Target");
+		gotoState->mTarget = gCamera.WindowPointToWorld(gAEMousePosition);
+	}
+};
+
 void DemoActor::Initialize()
 {
 	// initiailize Colliders
@@ -133,6 +165,12 @@ void DemoActor::Initialize()
 
 	// initialize as an Actor
 	Actor::Initialize(); 
+
+	// IMPORTANT: The state machine API doesn't handle assignment operators well, so when the mBrain vector gets 
+	// resized, because it's an array, deep copy breaks the pointers. This is a bug and needs to be fixed
+	// for now, the work around is to force the brain to reserve a high capacity so that the vector doesn't need to resize
+	// and thus there will not be  deep copies when
+	mBrain.reserve(2);
 
 	// populate my state machine
 	mBrain[0].AddState(new SM_Wait);
@@ -147,6 +185,16 @@ void DemoActor::Initialize()
 	// initial state
 	mBrain[0].SetInitState("Wait");
 	mBrain[0].Reset();
+
+	// initialize the navigation state machine
+	mBrain.push_back(StateMachine(this));
+	SM_Navigate* navState = new SM_Navigate(&mBrain[0]);
+	navState->mInternalStateMachine.AddState(new State("Idle")); // add dummy state
+	navState->mInternalStateMachine.AddState(new SM_Nav_Active(&mBrain[0]));
+	navState->mInternalStateMachine.SetInitState("Idle");
+	mBrain[1].AddState(navState);
+	mBrain[1].SetInitState("Navigate");
+	mBrain[1].Reset();
 
 	// Load the path
 	std::ifstream fp("data/path.txt");
